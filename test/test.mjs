@@ -207,5 +207,112 @@ click(doc.getElementById("btnSizeClear"));
 eq("size clear -> Byte empty", sByte.value, "");
 eq("size clear -> GB empty", sGB.value, "");
 
+// ===== 程序员计算器（独立、表达式求值） =====
+const expr = doc.getElementById("calcExpr");
+const cDec = doc.getElementById("calcDec");
+const cHex = doc.getElementById("calcHex");
+const cBin = doc.getElementById("calcBin");
+const cProc = doc.getElementById("calcProcess");
+const cStatus = doc.getElementById("calcStatus");
+const padDigit = (ch) => click([...doc.querySelectorAll('.calc-pad button[data-digit]')].find((b) => b.dataset.digit === ch));
+const padOp = (op) => click(doc.querySelector(`.calc-pad button[data-op="${op}"]`));
+const padUnary = (u) => click(doc.querySelector(`.calc-pad button[data-unary="${u}"]`));
+const padIns = (s) => click(doc.querySelector(`.calc-pad button[data-ins="${s}"]`));
+const padAct = (a) => click(doc.querySelector(`.calc-pad button[data-act="${a}"]`));
+const calcC = () => padAct("c");
+// 直接键入表达式并求值
+const typeExpr = (s) => { expr.value = s; expr.dispatchEvent(new w.Event("input")); padAct("eq"); };
+
+// 独立性：操作计算器不影响位计算器（上方 decInput/hexInput/binValue）
+const bitDecBefore = dec.value, bitHexBefore = hex.value;
+
+// 默认值
+eq("calc default dec", cDec.textContent, "0");
+eq("calc default hex", cHex.textContent, "0x0");
+
+// 默认模式：32bit / Signed / Dec
+eq("calc default 32bit active", doc.getElementById("calcBtn32").classList.contains("active"), true);
+eq("calc default Signed active", doc.getElementById("calcSigned").classList.contains("active"), true);
+eq("calc default Dec active", doc.getElementById("calcInDec").classList.contains("active"), true);
+const keyA0 = [...doc.querySelectorAll('.calc-pad button[data-digit]')].find((b) => b.dataset.digit === "A");
+eq("calc default Dec disables A-F", keyA0.disabled, true);
+
+// 标准优先级：1+3/2-10 = -8（默认 Dec + Signed；3/2=1）
+typeExpr("1+3/2-10");
+eq("calc 1+3/2-10 dec", cDec.textContent, "-8");
+eq("calc 1+3/2-10 process", cProc.textContent, "1+3/2-10 = -8");
+click(doc.getElementById("calcUnsigned"));
+
+// 括号改变优先级：(1+3)/2 = 2
+typeExpr("(1+3)/2");
+eq("calc (1+3)/2 = 2", cDec.textContent, "2");
+
+// MOD 用 % 输入：17 % 5 = 2（按键 MOD 插入 %）
+calcC();
+padDigit("1"); padDigit("7"); padOp("%"); padDigit("5"); padAct("eq");
+eq("calc MOD key inserts %", expr.value, "17%5");
+eq("calc 17 % 5 = 2", cDec.textContent, "2");
+// 直接键入 % 与 MOD 关键字等价
+typeExpr("17 MOD 5");
+eq("calc 17 MOD 5 = 2", cDec.textContent, "2");
+
+// 十六进制输入与位运算优先级：回到 Hex
+click(doc.getElementById("calcInHex"));
+// FF AND 0F = 0F = 15
+typeExpr("FF AND 0F");
+eq("calc FF AND 0F dec", cDec.textContent, "15");
+eq("calc FF AND 0F hex", cHex.textContent, "0xF");
+
+// 移位与加法优先级：1 << 4 + 1 -> 1 << 5 = 32（+ 高于 <<）
+typeExpr("1 << 4 + 1");
+eq("calc 1<<(4+1) = 32", cDec.textContent, "32");
+
+// NOT 一元（切到 64bit）：NOT 0 = 全 F
+click(doc.getElementById("calcBtn64"));
+calcC();
+typeExpr("NOT 0");
+eq("calc NOT 0 (64bit) hex", cHex.textContent, "0xFFFFFFFFFFFFFFFF");
+
+// 32bit 位宽：NOT 0 = 0xFFFFFFFF
+click(doc.getElementById("calcBtn32"));
+typeExpr("NOT 0");
+eq("calc NOT 0 (32bit) hex", cHex.textContent, "0xFFFFFFFF");
+click(doc.getElementById("calcBtn64"));
+
+// 除零 -> 状态栏报错，不抛出
+typeExpr("5/0");
+eq("calc div by zero status", /除数为 0/.test(cStatus.textContent), true);
+
+// 括号不匹配 -> 报错
+typeExpr("(1+2");
+eq("calc unbalanced paren status", /括号不匹配/.test(cStatus.textContent), true);
+
+// 按键构建：点 7 + 8 = 15（Hex 模式，7+8=0xF）
+calcC();
+padDigit("7"); padOp("+"); padDigit("8"); padAct("eq");
+eq("calc keypad 7+8 dec", cDec.textContent, "15");
+
+// +/- 把末尾数字包成 (-N)（Dec 模式，避免与减号歧义）
+calcC();
+click(doc.getElementById("calcInDec"));
+expr.value = "10"; expr.dispatchEvent(new w.Event("input"));
+padAct("neg");
+eq("calc neg wraps to (-10)", expr.value, "(-10)");
+padAct("eq");
+click(doc.getElementById("calcSigned"));
+eq("calc (-10) signed dec", cDec.textContent, "-10");
+click(doc.getElementById("calcUnsigned"));
+
+// Hex/Dec 切换禁用 A-F
+const keyA = [...doc.querySelectorAll('.calc-pad button[data-digit]')].find((b) => b.dataset.digit === "A");
+click(doc.getElementById("calcInDec"));
+eq("calc Dec disables A-F", keyA.disabled, true);
+click(doc.getElementById("calcInHex"));
+eq("calc Hex enables A-F", keyA.disabled, false);
+
+// 独立性确认：位计算器显示未被计算器改动
+eq("bit calc dec unchanged", dec.value, bitDecBefore);
+eq("bit calc hex unchanged", hex.value, bitHexBefore);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

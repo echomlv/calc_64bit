@@ -126,6 +126,34 @@
     font-family: ui-monospace, "SF Mono", Menlo, monospace;
   }
   .opt { font-size: 13px; color: #333; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+
+  /* 程序员计算器 */
+  .seg { display: inline-flex; gap: 0; }
+  .seg button { border-radius: 0; }
+  .seg button:first-child { border-radius: 4px 0 0 4px; }
+  .seg button:last-child { border-radius: 0 4px 4px 0; margin-left: -1px; }
+  .seg button.active { background: #2d7dd2; color: #fff; border-color: #2d7dd2; }
+  #calcStatus { color: #888; font-size: 13px; min-height: 18px; }
+  #calcStatus.err { color: #d33; }
+  .calc-pad {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 6px;
+    max-width: 760px;
+    margin-top: 8px;
+  }
+  .calc-pad button {
+    height: 44px;
+    font-size: 15px;
+    background: #fafafa;
+  }
+  .calc-pad button.key-digit { color: #b5500f; font-weight: 600; }
+  .calc-pad button.key-hex { color: #7a3ea6; font-weight: 600; }
+  .calc-pad button.key-arith { color: #1b5fa6; }
+  .calc-pad button.key-bit { color: #1f7a3d; }
+  .calc-pad button.key-edit { color: #555; }
+  .calc-pad button:hover { background: #eee; }
+  .calc-pad button:disabled { opacity: .35; cursor: not-allowed; }
 </style>
 </head>
 <body>
@@ -162,6 +190,98 @@
     <span class="result-label">十六进制:</span>
     <input class="num" id="hexInput" type="text" autocomplete="off" spellcheck="false">
     <span class="hint">（不含 0x 前缀，回车或失焦后生效）</span>
+  </div>
+
+  <h3>程序员计算器:</h3>
+  <div class="toolbar">
+    <span class="seg" id="calcWidthSeg">
+      <button id="calcBtn32" class="active">32bit</button>
+      <button id="calcBtn64">64bit</button>
+    </span>
+    <span class="seg" id="calcSignSeg">
+      <button id="calcUnsigned">Unsigned</button>
+      <button id="calcSigned" class="active">Signed</button>
+    </span>
+    <span class="seg" id="calcBaseSeg">
+      <button id="calcInHex">Hex</button>
+      <button id="calcInDec" class="active">Dec</button>
+    </span>
+    <span class="hint">独立计算器：键盘可直接输入表达式，支持 ( ) 与运算优先级；= 求值</span>
+  </div>
+
+  <div class="result-row">
+    <span class="result-label">表达式:</span>
+    <input class="num" id="calcExpr" type="text" autocomplete="off" spellcheck="false" style="min-width:420px">
+  </div>
+  <div class="result-row">
+    <span class="result-label">过程:</span>
+    <span class="bin-value" id="calcProcess"></span>
+  </div>
+  <div class="result-row">
+    <span class="result-label">十进制:</span>
+    <span class="bin-value" id="calcDec">0</span>
+  </div>
+  <div class="result-row">
+    <span class="result-label">十六进制:</span>
+    <span class="bin-value" id="calcHex">0x0</span>
+  </div>
+  <div class="result-row">
+    <span class="result-label">二进制:</span>
+    <span class="bin-value" id="calcBin"></span>
+  </div>
+  <div class="result-row">
+    <span class="result-label"></span>
+    <span id="calcStatus"></span>
+  </div>
+
+  <div class="calc-pad">
+    <button class="key-hex" data-digit="D">D</button>
+    <button class="key-hex" data-digit="E">E</button>
+    <button class="key-hex" data-digit="F">F</button>
+    <button class="key-arith" data-op="/">&divide;</button>
+    <button class="key-edit" data-act="back">Back</button>
+    <button class="key-edit" data-act="ce">CE</button>
+    <button class="key-edit" data-act="c">C</button>
+
+    <button class="key-hex" data-digit="A">A</button>
+    <button class="key-hex" data-digit="B">B</button>
+    <button class="key-hex" data-digit="C">C</button>
+    <button class="key-arith" data-op="*">&times;</button>
+    <button class="key-edit" data-act="neg">+/-</button>
+    <button class="key-bit" data-op="ROL">RoL</button>
+    <button class="key-bit" data-op="ROR">RoR</button>
+
+    <button class="key-digit" data-digit="7">7</button>
+    <button class="key-digit" data-digit="8">8</button>
+    <button class="key-digit" data-digit="9">9</button>
+    <button class="key-arith" data-op="-">&minus;</button>
+    <button class="key-arith" data-op="%">MOD</button>
+    <button class="key-bit" data-op="&lt;&lt;">&lt;&lt;</button>
+    <button class="key-bit" data-op="&gt;&gt;">&gt;&gt;</button>
+
+    <button class="key-digit" data-digit="4">4</button>
+    <button class="key-digit" data-digit="5">5</button>
+    <button class="key-digit" data-digit="6">6</button>
+    <button class="key-arith" data-op="+">+</button>
+    <button class="key-bit" data-unary="NOT">NOT</button>
+    <button class="key-edit" data-ins="(">(</button>
+    <button class="key-edit" data-ins=")">)</button>
+
+    <button class="key-digit" data-digit="1">1</button>
+    <button class="key-digit" data-digit="2">2</button>
+    <button class="key-digit" data-digit="3">3</button>
+    <button class="key-arith" data-act="eq">=</button>
+    <button class="key-bit" data-op="AND">AND</button>
+    <button class="key-bit" data-op="OR">OR</button>
+    <button class="key-bit" data-op="XOR">XOR</button>
+
+    <button class="key-digit" data-digit="0">0</button>
+    <span></span>
+    <span></span>
+    <span></span>
+    <button class="key-bit" data-op="NAND">NAND</button>
+    <button class="key-bit" data-op="NOR">NOR</button>
+    <button class="key-bit" data-op="XNOR">XNOR</button>
   </div>
   </section>
 
@@ -446,6 +566,246 @@
   document.getElementById("btnSizeClear").addEventListener("click", clearAll);
   // 切换分组开关时，按当前值重新渲染所有框（无聚焦源框）
   groupToggle.addEventListener("change", function () { paintAll(null); });
+})();
+
+// ===== 程序员计算器（独立：自有状态与显示，表达式求值，支持括号与优先级） =====
+(function () {
+  "use strict";
+
+  // ---- 独立状态（不与位计算器共享）；默认 32bit / Signed / Dec ----
+  let cwidth = 32n, cmask = (1n << cwidth) - 1n;
+  let csigned = true;      // 有符号/无符号（影响十进制显示与 ÷ % >> 语义）
+  let cbase = 10;          // 按键/解析进制：16 / 10
+  let lastResult = 0n;     // 最近一次求值结果（无符号位模式）
+  let justEvaluated = false;
+
+  const exprInput = document.getElementById("calcExpr");
+  const procEl = document.getElementById("calcProcess");
+  const decEl = document.getElementById("calcDec");
+  const hexEl = document.getElementById("calcHex");
+  const binEl = document.getElementById("calcBin");
+  const statusEl = document.getElementById("calcStatus");
+
+  const toSigned = (x) => ((x >> (cwidth - 1n)) & 1n) ? x - (1n << cwidth) : x;
+  const decString = (r) => (csigned ? toSigned(r) : r).toString(10);
+  const setStatus = (m, e) => { statusEl.textContent = m || ""; statusEl.classList.toggle("err", !!e); };
+
+  // ---- 运算实现（带位宽掩码 / 有符号语义） ----
+  function div(a, b) { if (b === 0n) throw new Error("除数为 0"); return (csigned ? toSigned(a) / toSigned(b) : a / b) & cmask; }
+  function mod(a, b) { if (b === 0n) throw new Error("除数为 0"); return (csigned ? toSigned(a) % toSigned(b) : a % b) & cmask; }
+  function shl(a, b) { return b >= cwidth ? 0n : (a << b) & cmask; }
+  function shr(a, b) {
+    if (b >= cwidth) return csigned && ((a >> (cwidth - 1n)) & 1n) ? cmask : 0n;
+    return (csigned ? (toSigned(a) >> b) : (a >> b)) & cmask;
+  }
+  function rol(a, b) { const n = ((b % cwidth) + cwidth) % cwidth; return n === 0n ? (a & cmask) : ((a << n) | (a >> (cwidth - n))) & cmask; }
+  function ror(a, b) { const n = ((b % cwidth) + cwidth) % cwidth; return n === 0n ? (a & cmask) : ((a >> n) | (a << (cwidth - n))) & cmask; }
+
+  // 二元运算符：优先级 p（大者先算，左结合）；一元 NOT / 负号优先级最高
+  const OPS = {
+    "*": { p: 6, f: (a, b) => (a * b) & cmask },
+    "/": { p: 6, f: div },
+    "%": { p: 6, f: mod },
+    "MOD": { p: 6, f: mod },   // 输入 % 或 MOD 等价
+    "+": { p: 5, f: (a, b) => (a + b) & cmask },
+    "-": { p: 5, f: (a, b) => (a - b) & cmask },
+    "<<": { p: 4, f: shl },
+    ">>": { p: 4, f: shr },
+    "ROL": { p: 4, f: rol },
+    "ROR": { p: 4, f: ror },
+    "AND": { p: 3, f: (a, b) => (a & b) & cmask },
+    "NAND": { p: 3, f: (a, b) => ~(a & b) & cmask },
+    "XOR": { p: 2, f: (a, b) => (a ^ b) & cmask },
+    "XNOR": { p: 2, f: (a, b) => ~(a ^ b) & cmask },
+    "OR": { p: 1, f: (a, b) => (a | b) & cmask },
+    "NOR": { p: 1, f: (a, b) => ~(a | b) & cmask },
+  };
+  const KEYWORDS = new Set(["MOD", "ROL", "ROR", "AND", "NAND", "XOR", "XNOR", "OR", "NOR", "NOT"]);
+
+  // ---- 词法分析 ----
+  function tokenize(s) {
+    const toks = []; let i = 0; const n = s.length;
+    while (i < n) {
+      const c = s[i];
+      if (c === " " || c === "\t") { i++; continue; }
+      if (c === "(" || c === ")") { toks.push({ t: c }); i++; continue; }
+      if (c === "<" && s[i + 1] === "<") { toks.push({ t: "op", v: "<<" }); i += 2; continue; }
+      if (c === ">" && s[i + 1] === ">") { toks.push({ t: "op", v: ">>" }); i += 2; continue; }
+      if (c === "+" || c === "-" || c === "*" || c === "/" || c === "%") { toks.push({ t: "op", v: c }); i++; continue; }
+      if (c === "×") { toks.push({ t: "op", v: "*" }); i++; continue; }
+      if (c === "÷") { toks.push({ t: "op", v: "/" }); i++; continue; }
+      if (c === "−") { toks.push({ t: "op", v: "-" }); i++; continue; }
+      if (/[0-9A-Za-z]/.test(c)) {
+        let j = i; while (j < n && /[0-9A-Za-z]/.test(s[j])) j++;
+        const run = s.slice(i, j); const up = run.toUpperCase(); i = j;
+        if (KEYWORDS.has(up)) { toks.push(up === "NOT" ? { t: "not" } : { t: "op", v: up }); continue; }
+        if (cbase === 16) {
+          if (!/^[0-9A-F]+$/.test(up)) throw new Error("非法字符: " + run);
+          toks.push({ t: "num", v: BigInt("0x" + up) & cmask });
+        } else {
+          if (!/^[0-9]+$/.test(run)) throw new Error("非法字符: " + run);
+          toks.push({ t: "num", v: BigInt(run) & cmask });
+        }
+        continue;
+      }
+      throw new Error("非法字符: " + c);
+    }
+    return toks;
+  }
+
+  // ---- 调度场算法 -> 逆波兰 ----
+  function toRPN(toks) {
+    const out = [], ops = []; let prev = null;
+    const isValuePrev = () => prev === "num" || prev === ")";
+    for (const tk of toks) {
+      if (tk.t === "num") { out.push(tk); prev = "num"; }
+      else if (tk.t === "not") { ops.push({ t: "u", v: "NOT" }); prev = "op"; }
+      else if (tk.t === "op") {
+        if ((tk.v === "-" || tk.v === "+") && !isValuePrev()) {
+          if (tk.v === "-") ops.push({ t: "u", v: "u-" }); // 一元负号；一元正号忽略
+          prev = "op"; continue;
+        }
+        const p = OPS[tk.v].p;
+        while (ops.length) {
+          const top = ops[ops.length - 1];
+          if (top.t === "(") break;
+          const tp = top.t === "u" ? 7 : OPS[top.v].p;
+          if (tp >= p) out.push(ops.pop()); else break;
+        }
+        ops.push({ t: "b", v: tk.v }); prev = "op";
+      }
+      else if (tk.t === "(") { ops.push({ t: "(" }); prev = "("; }
+      else if (tk.t === ")") {
+        while (ops.length && ops[ops.length - 1].t !== "(") out.push(ops.pop());
+        if (!ops.length) throw new Error("括号不匹配");
+        ops.pop(); prev = ")";
+      }
+    }
+    while (ops.length) { const o = ops.pop(); if (o.t === "(") throw new Error("括号不匹配"); out.push(o); }
+    return out;
+  }
+
+  function evalRPN(rpn) {
+    const st = [];
+    for (const o of rpn) {
+      if (o.t === "num") st.push(o.v);
+      else if (o.t === "u") {
+        if (!st.length) throw new Error("表达式错误");
+        const a = st.pop();
+        st.push(o.v === "NOT" ? (~a & cmask) : ((-a) & cmask));
+      } else {
+        if (st.length < 2) throw new Error("表达式错误");
+        const b = st.pop(), a = st.pop();
+        st.push(OPS[o.v].f(a, b));
+      }
+    }
+    if (st.length !== 1) throw new Error("表达式错误");
+    return st[0] & cmask;
+  }
+
+  const evaluate = (s) => evalRPN(toRPN(tokenize(s)));
+
+  // ---- 显示 ----
+  function showResult(r) {
+    lastResult = r & cmask;
+    decEl.textContent = decString(lastResult);
+    hexEl.textContent = "0x" + lastResult.toString(16).toUpperCase();
+    binEl.textContent = lastResult.toString(2).padStart(Number(cwidth), "0");
+  }
+
+  function pressEquals() {
+    const s = exprInput.value.trim();
+    try {
+      const r = s === "" ? 0n : evaluate(s);
+      showResult(r);
+      procEl.textContent = (s || "0") + " = " + decString(r);
+      setStatus("");
+      justEvaluated = true;
+    } catch (e) { setStatus(e.message || "表达式错误", true); }
+  }
+
+  // 求值后接续上次结果的字面量（按当前进制）
+  const curResultLiteral = () => cbase === 16 ? lastResult.toString(16).toUpperCase() : decString(lastResult);
+
+  // mode: digit/fresh -> 求值后清空重输；op -> 求值后接上次结果；plain -> 直接追加
+  function appendToExpr(str, mode) {
+    if (justEvaluated) {
+      if (mode === "op") exprInput.value = curResultLiteral();
+      else if (mode !== "plain") exprInput.value = "";
+      justEvaluated = false;
+    }
+    exprInput.value += str;
+  }
+
+  function pressNeg() {
+    if (justEvaluated) { showResult((-lastResult) & cmask); exprInput.value = curResultLiteral(); justEvaluated = false; return; }
+    const v = exprInput.value;
+    const mw = /\(-([0-9A-Fa-f]+)\)$/.exec(v);     // 已是 (-N) -> 还原 N
+    if (mw) { exprInput.value = v.slice(0, mw.index) + mw[1]; return; }
+    const m = /[0-9A-Fa-f]+$/.exec(v);             // 末尾数字 -> 包成 (-N)，避免与减号歧义
+    if (m) exprInput.value = v.slice(0, m.index) + "(-" + m[0] + ")";
+  }
+
+  function onEdit(a) {
+    if (a === "back") exprInput.value = exprInput.value.slice(0, -1);
+    else if (a === "ce") exprInput.value = "";
+    else if (a === "c") { exprInput.value = ""; procEl.textContent = ""; setStatus(""); showResult(0n); justEvaluated = false; }
+  }
+
+  // ---- 按键绑定 ----
+  document.querySelectorAll(".calc-pad button").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      if (btn.dataset.digit !== undefined) return appendToExpr(btn.dataset.digit, "digit");
+      if (btn.dataset.op !== undefined) {
+        const op = btn.dataset.op;
+        return appendToExpr(/^[A-Z]/.test(op) ? " " + op + " " : op, "op");
+      }
+      if (btn.dataset.unary !== undefined) return appendToExpr(btn.dataset.unary + " ", "fresh");
+      if (btn.dataset.ins !== undefined) return appendToExpr(btn.dataset.ins, btn.dataset.ins === "(" ? "fresh" : "plain");
+      const a = btn.dataset.act;
+      if (a === "eq") return pressEquals();
+      if (a === "neg") return pressNeg();
+      return onEdit(a);
+    });
+  });
+
+  exprInput.addEventListener("input", function () { justEvaluated = false; });
+  exprInput.addEventListener("keydown", function (e) { if (e.key === "Enter") { pressEquals(); } });
+
+  // ---- 设置切换 ----
+  const hexKeys = Array.from(document.querySelectorAll(".calc-pad button[data-digit]")).filter((b) => /[A-F]/.test(b.dataset.digit));
+  function refreshAfterSetting() {
+    const s = exprInput.value.trim();
+    if (s === "") { showResult(lastResult & cmask); return; }
+    try { showResult(evaluate(s)); setStatus(""); } catch (e) { showResult(lastResult & cmask); }
+  }
+  function setCWidth(w) {
+    cwidth = w; cmask = (1n << w) - 1n;
+    document.getElementById("calcBtn32").classList.toggle("active", w === 32n);
+    document.getElementById("calcBtn64").classList.toggle("active", w === 64n);
+    refreshAfterSetting();
+  }
+  function setCSigned(on) {
+    csigned = on;
+    document.getElementById("calcSigned").classList.toggle("active", on);
+    document.getElementById("calcUnsigned").classList.toggle("active", !on);
+    showResult(lastResult);
+  }
+  function setCBase(b) {
+    cbase = b;
+    document.getElementById("calcInHex").classList.toggle("active", b === 16);
+    document.getElementById("calcInDec").classList.toggle("active", b === 10);
+    hexKeys.forEach((k) => { k.disabled = (b !== 16); });
+  }
+  document.getElementById("calcBtn32").addEventListener("click", () => setCWidth(32n));
+  document.getElementById("calcBtn64").addEventListener("click", () => setCWidth(64n));
+  document.getElementById("calcSigned").addEventListener("click", () => setCSigned(true));
+  document.getElementById("calcUnsigned").addEventListener("click", () => setCSigned(false));
+  document.getElementById("calcInHex").addEventListener("click", () => setCBase(16));
+  document.getElementById("calcInDec").addEventListener("click", () => setCBase(10));
+
+  setCBase(cbase);   // 同步默认 Dec：禁用 A~F
+  showResult(0n);
 })();
 
 // ===== 标签页切换 =====
