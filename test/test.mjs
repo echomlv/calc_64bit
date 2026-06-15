@@ -93,5 +93,119 @@ eq("bit63 set hex", hex.value, "8000000000000000");
 click(doc.getElementById("btnLeft"));
 eq("<<1 overflow at 64bit -> 0", dec.value, "0");
 
+// ===== 容量换算 =====
+const tabSize = doc.getElementById("tabSize");
+const tabBits = doc.getElementById("tabBits");
+const panelSize = doc.getElementById("panelSize");
+const panelBits = doc.getElementById("panelBits");
+const sByte = doc.getElementById("sizeByte");
+const sKB = doc.getElementById("sizeKB");
+const sMB = doc.getElementById("sizeMB");
+const sGB = doc.getElementById("sizeGB");
+const sTB = doc.getElementById("sizeTB");
+const typeSize = (el, v) => { el.value = v; el.dispatchEvent(new w.Event("input")); };
+
+// --- tab 切换 ---
+eq("default: bits panel active", panelBits.classList.contains("active"), true);
+eq("default: size panel hidden", panelSize.classList.contains("active"), false);
+click(tabSize);
+eq("after click: size panel active", panelSize.classList.contains("active"), true);
+eq("after click: bits panel hidden", panelBits.classList.contains("active"), false);
+eq("after click: size tab active", tabSize.classList.contains("active"), true);
+click(tabBits);
+eq("switch back: bits panel active", panelBits.classList.contains("active"), true);
+eq("switch back: size panel hidden", panelSize.classList.contains("active"), false);
+
+// --- 1 GB（1024 进位）---
+typeSize(sGB, "1");
+eq("1GB -> KB", sKB.value, "1048576");
+eq("1GB -> MB", sMB.value, "1024");
+eq("1GB -> Byte", sByte.value, "1073741824");
+eq("1GB -> TB", sTB.value, "0.000977"); // 0.0009765625 -> 6 位小数
+
+// --- 1536 MB -> 1.5 GB ---
+typeSize(sMB, "1536");
+eq("1536MB -> GB", sGB.value, "1.5");
+eq("1536MB -> Byte", sByte.value, "1610612736");
+
+// --- 1 TB ---
+typeSize(sTB, "1");
+eq("1TB -> GB", sGB.value, "1024");
+eq("1TB -> Byte", sByte.value, "1099511627776");
+
+// --- 小数 0.5 KB -> 512 Byte ---
+typeSize(sKB, "0.5");
+eq("0.5KB -> Byte", sByte.value, "512");
+
+// --- 十进制输入时，各框后显示十六进制 ---
+const altText = (el) => el.parentNode.querySelector(".alt").textContent;
+typeSize(sKB, "1");
+eq("dec input: Byte value", sByte.value, "1024");
+eq("dec input: Byte alt = hex", altText(sByte), "= 0x400");
+eq("dec input: KB alt = hex", altText(sKB), "= 0x1");
+
+// --- 十六进制输入：结果也用十六进制，alt 显示十进制 ---
+typeSize(sByte, "0x400");
+eq("hex input: KB value in hex", sKB.value, "0x1");
+eq("hex input: MB value in hex", sMB.value, "0x0.004"); // 1024/1048576 = 1/1024 = 0x0.004
+eq("hex input: Byte alt = dec", altText(sByte), "= 1024");
+eq("hex input: KB alt = dec", altText(sKB), "= 1");
+
+// --- 十六进制大值：0x40000000 Byte = 1 GB ---
+typeSize(sByte, "0x40000000");
+eq("hex 0x40000000 -> GB hex", sGB.value, "0x1");
+eq("hex 0x40000000 -> GB alt dec", altText(sGB), "= 1");
+
+// --- 十六进制每 4 位空格隔开 ---
+typeSize(sGB, "1"); // dec 1 GB -> Byte 0x40000000
+eq("dec 1GB: Byte alt grouped hex", altText(sByte), "= 0x4000 0000");
+typeSize(sMB, "1"); // dec 1 MB -> Byte 0x100000
+eq("dec 1MB: Byte alt grouped hex", altText(sByte), "= 0x10 0000");
+
+// --- 输入带空格自动去除用于计算 ---
+typeSize(sByte, "0x4000 0000");
+eq("spaced hex input -> GB", sGB.value, "0x1");
+
+// --- 失焦后源框按每 4 位空格重新格式化 ---
+sByte.value = "0x40000000";
+sByte.dispatchEvent(new w.Event("input"));
+sByte.dispatchEvent(new w.Event("blur"));
+eq("blur regroups source hex", sByte.value, "0x4000 0000");
+
+// --- 分组开关：默认开启，关闭后无空格，重新开启又分组 ---
+const groupToggle = doc.getElementById("groupToggle");
+eq("group toggle default on", groupToggle.checked, true);
+typeSize(sGB, "1"); // dec 1 GB -> Byte alt = 0x4000 0000
+eq("grouping on: Byte alt grouped", altText(sByte), "= 0x4000 0000");
+groupToggle.checked = false;
+groupToggle.dispatchEvent(new w.Event("change"));
+eq("grouping off: Byte alt no space", altText(sByte), "= 0x40000000");
+// 十六进制源框关闭分组后也无空格
+typeSize(sByte, "0x40000000");
+eq("grouping off: KB value no space (hex)", sByte.value, "0x40000000"); // 源框失焦前保持输入
+eq("grouping off: GB alt dec", altText(sGB), "= 1");
+groupToggle.checked = true;
+groupToggle.dispatchEvent(new w.Event("change"));
+eq("grouping on again: Byte value regrouped", sByte.value, "0x4000 0000");
+
+// --- 非法十六进制 ---
+typeSize(sGB, "0xZZ");
+eq("invalid hex flagged", sGB.classList.contains("invalid"), true);
+
+// 恢复十进制状态，便于后续清零测试
+typeSize(sGB, "");
+
+// --- 非法输入：标红且不覆盖其它框 ---
+typeSize(sGB, "2"); // 先设一个有效值
+const byteBefore = sByte.value;
+typeSize(sGB, "abc");
+eq("invalid size input flagged", sGB.classList.contains("invalid"), true);
+eq("invalid size input keeps others", sByte.value, byteBefore);
+
+// --- 清零 ---
+click(doc.getElementById("btnSizeClear"));
+eq("size clear -> Byte empty", sByte.value, "");
+eq("size clear -> GB empty", sGB.value, "");
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

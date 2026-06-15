@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>寄存器配置位计算器</title>
+<title>嵌入式小工具</title>
 <style>
   :root {
     --cell: 30px;
@@ -91,9 +91,50 @@
   }
   input.num.invalid { border-color: #d33; background: #fff3f3; }
   .hint { color: #888; font-size: 12px; }
+
+  /* 顶部标签页 */
+  .tabs { display: flex; gap: 6px; border-bottom: 1px solid #ddd; margin-bottom: 18px; }
+  .tabs button {
+    border: none;
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    border-radius: 0;
+    padding: 8px 14px;
+    font-size: 14px;
+    color: #555;
+  }
+  .tabs button:hover { background: #f2f2f2; }
+  .tabs button.active {
+    color: #2d7dd2;
+    border-bottom-color: #2d7dd2;
+    font-weight: 600;
+    background: transparent;
+  }
+  .panel { display: none; }
+  .panel.active { display: block; }
+  /* 输入框后显示的「另一种进制」 */
+  .alt {
+    color: #2d7dd2;
+    font-size: 13px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    margin-left: 6px;
+  }
+  .hint code {
+    background: #f0f0f0;
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  .opt { font-size: 13px; color: #333; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
 </style>
 </head>
 <body>
+  <div class="tabs">
+    <button id="tabBits" class="active">位计算器</button>
+    <button id="tabSize">容量换算</button>
+  </div>
+
+  <section id="panelBits" class="panel active">
   <h3>二进制位选择:</h3>
   <div class="bits-scroll" id="bitsContainer"></div>
 
@@ -122,6 +163,43 @@
     <input class="num" id="hexInput" type="text" autocomplete="off" spellcheck="false">
     <span class="hint">（不含 0x 前缀，回车或失焦后生效）</span>
   </div>
+  </section>
+
+  <section id="panelSize" class="panel">
+  <h3>数据容量换算（1 KB = 1024 Byte）:</h3>
+  <div class="result-row">
+    <span class="result-label">Byte:</span>
+    <input class="num size-input" id="sizeByte" data-unit="Byte" type="text" autocomplete="off" spellcheck="false">
+    <span class="alt"></span>
+  </div>
+  <div class="result-row">
+    <span class="result-label">KB:</span>
+    <input class="num size-input" id="sizeKB" data-unit="KB" type="text" autocomplete="off" spellcheck="false">
+    <span class="alt"></span>
+  </div>
+  <div class="result-row">
+    <span class="result-label">MB:</span>
+    <input class="num size-input" id="sizeMB" data-unit="MB" type="text" autocomplete="off" spellcheck="false">
+    <span class="alt"></span>
+  </div>
+  <div class="result-row">
+    <span class="result-label">GB:</span>
+    <input class="num size-input" id="sizeGB" data-unit="GB" type="text" autocomplete="off" spellcheck="false">
+    <span class="alt"></span>
+  </div>
+  <div class="result-row">
+    <span class="result-label">TB:</span>
+    <input class="num size-input" id="sizeTB" data-unit="TB" type="text" autocomplete="off" spellcheck="false">
+    <span class="alt"></span>
+  </div>
+  <div class="toolbar">
+    <button id="btnSizeClear">清零</button>
+    <label class="opt"><input type="checkbox" id="groupToggle" checked> 十六进制每 4 位空格隔开</label>
+  </div>
+  <div class="toolbar">
+    <span class="hint">十进制直接输入；十六进制以 <code>0x</code> 开头（如 <code>0x400</code>）。输入什么进制，各框结果就用什么进制显示；输入框后显示另一种进制。</span>
+  </div>
+  </section>
 
 <script>
 (function () {
@@ -262,6 +340,130 @@
 
   // ---- 初始化 ----
   setWidth(64n);
+})();
+
+// ===== 数据容量换算 =====
+(function () {
+  "use strict";
+
+  // 1024 进位；以 Byte 为内部规范值（double，~2^53 内精确，覆盖约 8192 TB，
+  // 本工具场景足够；超大数或多单位高精度小数可能有浮点误差，可接受）。
+  const FACTORS = { Byte: 1, KB: 1024, MB: 1024 ** 2, GB: 1024 ** 3, TB: 1024 ** 4 };
+  const inputs = Array.from(document.querySelectorAll(".size-input"));
+  const altOf = (el) => el.parentNode.querySelector(".alt");
+  const groupToggle = document.getElementById("groupToggle");
+  // 当前显示进制：跟随最近一次输入框使用的进制（10 或 16）
+  let displayBase = 10;
+  // 最近一次的规范值（Byte，null 表示空）；用于切换分组开关时重新渲染
+  let lastBytes = null;
+
+  // 十进制格式化：最多 6 位小数，去掉末尾多余的 0 与小数点
+  function fmtDec(n) {
+    if (n === 0) return "0";
+    let s = n.toFixed(6);
+    if (s.indexOf(".") >= 0) s = s.replace(/0+$/, "").replace(/\.$/, "");
+    return s;
+  }
+
+  // 整数部分从右往左每 4 位插入一个空格："40000000" -> "4000 0000"
+  function group4(s) { return s.replace(/\B(?=(.{4})+$)/g, " "); }
+
+  // 十六进制格式化：0x 开头，整数部分每 4 位空格隔开（受分组开关控制）；
+  // 小数部分（来自 1024=2^10 的整除，多为有限位）截断到 8 位
+  function fmtHex(n) {
+    if (n === 0) return "0x0";
+    let ip = n.toString(16), fp = "";
+    if (ip.indexOf(".") >= 0) {
+      [ip, fp] = ip.split(".");
+      fp = fp.slice(0, 8).replace(/0+$/, "");
+    }
+    ip = ip.toUpperCase();
+    let out = "0x" + (groupToggle.checked ? group4(ip) : ip);
+    if (fp) out += "." + fp.toUpperCase();
+    return out;
+  }
+
+  const fmtInBase = (n, base) => (base === 16 ? fmtHex(n) : fmtDec(n));
+
+  // 解析输入：先去掉所有空格（十六进制显示用空格分组），再判断进制。
+  // 0x 前缀 -> 十六进制（支持小数），否则十进制。返回 { ok, empty, base, value }
+  function parseInput(raw) {
+    const s = raw.replace(/\s+/g, "");
+    if (s === "") return { ok: true, empty: true };
+    let base = 10, body = s;
+    if (/^0x/i.test(s)) { base = 16; body = s.slice(2); }
+    const v = base === 16 ? parseHexFloat(body) : (/^\d*\.?\d+$/.test(body) ? Number(body) : NaN);
+    if (!isFinite(v) || v < 0) return { ok: false };
+    return { ok: true, base, value: v };
+  }
+
+  function parseHexFloat(body) {
+    const parts = body.split(".");
+    if (parts.length > 2) return NaN;
+    const ip = parts[0], fp = parts[1] || "";
+    if (ip === "" && fp === "") return NaN;
+    if (ip && !/^[0-9a-f]+$/i.test(ip)) return NaN;
+    if (fp && !/^[0-9a-f]+$/i.test(fp)) return NaN;
+    let val = ip ? parseInt(ip, 16) : 0;
+    for (let i = 0; i < fp.length; i++) val += parseInt(fp[i], 16) / Math.pow(16, i + 1);
+    return val;
+  }
+
+  function clearAll() {
+    lastBytes = null;
+    inputs.forEach((el) => { el.value = ""; el.classList.remove("invalid"); altOf(el).textContent = ""; });
+  }
+
+  // 按 lastBytes/displayBase 渲染所有框与其后的「另一种进制」；skip 为正在输入的源框（不覆盖其值）
+  function paintAll(skip) {
+    if (lastBytes === null) return;
+    const otherBase = displayBase === 16 ? 10 : 16;
+    inputs.forEach((el) => {
+      const val = lastBytes / FACTORS[el.dataset.unit];
+      if (el !== skip) { el.value = fmtInBase(val, displayBase); el.classList.remove("invalid"); }
+      altOf(el).textContent = "= " + fmtInBase(val, otherBase);
+    });
+  }
+
+  function update(src) {
+    const r = parseInput(src.value);
+    if (r.empty) { clearAll(); return; }
+    if (!r.ok) { src.classList.add("invalid"); return; }
+    src.classList.remove("invalid");
+    displayBase = r.base;
+    lastBytes = r.value * FACTORS[src.dataset.unit];
+    paintAll(src);
+  }
+
+  inputs.forEach((el) => {
+    el.addEventListener("input", function () { update(el); });
+    // 失焦时把用户输入的源框也按当前进制规范化（十六进制即每 4 位空格隔开）
+    el.addEventListener("blur", function () {
+      const r = parseInput(el.value);
+      if (r.ok && !r.empty) el.value = fmtInBase(r.value, r.base);
+    });
+  });
+  document.getElementById("btnSizeClear").addEventListener("click", clearAll);
+  // 切换分组开关时，按当前值重新渲染所有框（无聚焦源框）
+  groupToggle.addEventListener("change", function () { paintAll(null); });
+})();
+
+// ===== 标签页切换 =====
+(function () {
+  "use strict";
+  const tabs = {
+    tabBits: "panelBits",
+    tabSize: "panelSize",
+  };
+  Object.keys(tabs).forEach(function (tabId) {
+    document.getElementById(tabId).addEventListener("click", function () {
+      Object.entries(tabs).forEach(function ([t, p]) {
+        const on = t === tabId;
+        document.getElementById(t).classList.toggle("active", on);
+        document.getElementById(p).classList.toggle("active", on);
+      });
+    });
+  });
 })();
 </script>
 </body>
