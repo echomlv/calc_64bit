@@ -1,0 +1,12 @@
+{
+  "name": "calc-64bit",
+  "version": "1.0.0",
+  "description": "寄存器配置位计算器 (Bit Calculator)",
+  "private": true,
+  "scripts": {
+    "test": "node test/test.mjs"
+  },
+  "devDependencies": {
+    "jsdom": "^24.0.0"
+  }
+}

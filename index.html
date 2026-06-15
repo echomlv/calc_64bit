@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>寄存器配置位计算器</title>
+<style>
+  :root {
+    --cell: 30px;
+    --gap: 4px;
+  }
+  body {
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    margin: 24px;
+    color: #222;
+    -webkit-font-smoothing: antialiased;
+  }
+  h3 { margin: 18px 0 10px; }
+  .toolbar { margin: 4px 0 16px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  button {
+    font-size: 13px;
+    padding: 5px 12px;
+    border: 1px solid #aaa;
+    background: #f5f5f5;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  button:hover { background: #e9e9e9; }
+  button:active { background: #ddd; }
+  .width-toggle { margin-left: 8px; }
+  .width-toggle .active { background: #2d7dd2; color: #fff; border-color: #2d7dd2; }
+
+  /* 位选择区：横向可滚动，索引行与方格行对齐 */
+  .bits-scroll { overflow-x: auto; padding-bottom: 6px; }
+  .bits-row {
+    display: grid;
+    grid-auto-flow: column;
+    gap: var(--gap);
+    width: max-content;
+    margin-bottom: 10px;
+  }
+  .bits-row:last-child { margin-bottom: 0; }
+  .bit-col { display: flex; flex-direction: column; align-items: center; }
+  .bit-index {
+    font-size: 11px;
+    color: #555;
+    height: 16px;
+    line-height: 16px;
+    user-select: none;
+  }
+  .bit-cell {
+    width: var(--cell);
+    height: var(--cell);
+    border: 1px solid #999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    cursor: pointer;
+    background: #fff;
+    box-sizing: border-box;
+    user-select: none;
+  }
+  .bit-cell.on {
+    background: #2d7dd2;
+    color: #fff;
+    border-color: #2d7dd2;
+    font-weight: 600;
+  }
+  /* 字节边界（每个字节的两端，如 bit 0 与 bit 7）加粗强调 */
+  .bit-cell.byte-edge {
+    font-weight: 700;
+    border-width: 2px;
+    border-color: #555;
+  }
+  .bit-cell.byte-edge.on { border-color: #1b5fa6; }
+  .bit-index.byte-edge { font-weight: 700; color: #222; }
+  /* 每个字节之间留出分隔间距 */
+  .bit-col.byte-gap { margin-right: 10px; }
+
+  .result-row { margin: 8px 0; display: flex; align-items: center; gap: 8px; }
+  .result-label { display: inline-block; width: 72px; color: #333; }
+  .bin-value { font-family: ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: 1px; word-break: break-all; }
+  input.num {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 14px;
+    padding: 4px 6px;
+    border: 1px solid #999;
+    border-radius: 3px;
+    min-width: 220px;
+  }
+  input.num.invalid { border-color: #d33; background: #fff3f3; }
+  .hint { color: #888; font-size: 12px; }
+</style>
+</head>
+<body>
+  <h3>二进制位选择:</h3>
+  <div class="bits-scroll" id="bitsContainer"></div>
+
+  <div class="toolbar">
+    <button id="btnLeft">左移 &lt;&lt;</button>
+    <button id="btnRight">右移 &gt;&gt;</button>
+    <button id="btnClear">清零</button>
+    <span class="width-toggle">
+      位宽:
+      <button id="btn32">32bit</button>
+      <button id="btn64">64bit</button>
+    </span>
+  </div>
+
+  <h3>结果:</h3>
+  <div class="result-row">
+    <span class="result-label">二进制:</span>
+    <span class="bin-value" id="binValue"></span>
+  </div>
+  <div class="result-row">
+    <span class="result-label">十进制:</span>
+    <input class="num" id="decInput" type="text" autocomplete="off" spellcheck="false">
+  </div>
+  <div class="result-row">
+    <span class="result-label">十六进制:</span>
+    <input class="num" id="hexInput" type="text" autocomplete="off" spellcheck="false">
+    <span class="hint">（不含 0x 前缀，回车或失焦后生效）</span>
+  </div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---- 单一数据源 ----
+  let value = 0n;
+  let width = 64n;             // 32n 或 64n
+  let mask = (1n << width) - 1n;
+
+  const bitsContainer = document.getElementById("bitsContainer");
+  const binValue = document.getElementById("binValue");
+  const decInput = document.getElementById("decInput");
+  const hexInput = document.getElementById("hexInput");
+
+  // ---- 构建 bit 方格（高位在左，bit0 在右；每行 32 位） ----
+  function buildBits() {
+    bitsContainer.innerHTML = "";
+    const n = Number(width);
+    const perRow = 32;
+    // 64bit -> 两行 [63..32]、[31..0]；32bit -> 一行 [31..0]
+    for (let start = n - 1; start >= 0; start -= perRow) {
+      const end = Math.max(0, start - perRow + 1);
+      const row = document.createElement("div");
+      row.className = "bits-row";
+      for (let i = start; i >= end; i--) {
+        // 字节边界：每个字节的两端位（如 bit 0 与 bit 7）
+        const isByteEdge = (i % 8 === 0) || (i % 8 === 7);
+
+        const col = document.createElement("div");
+        col.className = "bit-col" + (i % 8 === 0 && i !== end ? " byte-gap" : "");
+
+        const idx = document.createElement("div");
+        idx.className = "bit-index" + (isByteEdge ? " byte-edge" : "");
+        idx.textContent = i;
+
+        const cell = document.createElement("div");
+        cell.className = "bit-cell" + (isByteEdge ? " byte-edge" : "");
+        cell.dataset.bit = i;
+        cell.addEventListener("click", function () {
+          value ^= (1n << BigInt(i));
+          value &= mask;
+          render();
+        });
+
+        col.appendChild(idx);
+        col.appendChild(cell);
+        row.appendChild(col);
+      }
+      bitsContainer.appendChild(row);
+    }
+  }
+
+  // ---- 渲染所有视图 ----
+  function render() {
+    const bin = value.toString(2).padStart(Number(width), "0");
+
+    // bit 方格
+    const cells = bitsContainer.querySelectorAll(".bit-cell");
+    cells.forEach(function (cell) {
+      const i = Number(cell.dataset.bit);
+      const on = (value >> BigInt(i)) & 1n;
+      cell.textContent = on ? "1" : "0";
+      cell.classList.toggle("on", on === 1n);
+    });
+
+    binValue.textContent = bin;
+
+    // 输入框回写保护：正在编辑时不覆盖
+    if (document.activeElement !== decInput) {
+      decInput.value = value.toString(10);
+      decInput.classList.remove("invalid");
+    }
+    if (document.activeElement !== hexInput) {
+      hexInput.value = value.toString(16).toUpperCase();
+      hexInput.classList.remove("invalid");
+    }
+  }
+
+  // ---- 位宽切换 ----
+  function setWidth(w) {
+    width = w;
+    mask = (1n << width) - 1n;
+    value &= mask;            // 64->32 截断高位
+    document.getElementById("btn32").classList.toggle("active", width === 32n);
+    document.getElementById("btn64").classList.toggle("active", width === 64n);
+    buildBits();
+    render();
+  }
+
+  // ---- 输入解析 ----
+  function applyDec() {
+    const s = decInput.value.trim();
+    try {
+      const v = s === "" ? 0n : BigInt(s);
+      if (v < 0n) throw new Error("negative");
+      value = v & mask;
+      decInput.classList.remove("invalid");
+      render();
+    } catch (e) {
+      decInput.classList.add("invalid");
+    }
+  }
+
+  function applyHex() {
+    let s = hexInput.value.trim();
+    if (s.toLowerCase().startsWith("0x")) s = s.slice(2);
+    try {
+      const v = s === "" ? 0n : BigInt("0x" + s);
+      value = v & mask;
+      hexInput.classList.remove("invalid");
+      render();
+    } catch (e) {
+      hexInput.classList.add("invalid");
+    }
+  }
+
+  // ---- 事件绑定 ----
+  document.getElementById("btnLeft").addEventListener("click", function () {
+    value = (value << 1n) & mask;
+    render();
+  });
+  document.getElementById("btnRight").addEventListener("click", function () {
+    value = value >> 1n;
+    render();
+  });
+  document.getElementById("btnClear").addEventListener("click", function () {
+    value = 0n;
+    render();
+  });
+  document.getElementById("btn32").addEventListener("click", function () { setWidth(32n); });
+  document.getElementById("btn64").addEventListener("click", function () { setWidth(64n); });
+
+  decInput.addEventListener("blur", applyDec);
+  decInput.addEventListener("keydown", function (e) { if (e.key === "Enter") { applyDec(); decInput.blur(); } });
+  hexInput.addEventListener("blur", applyHex);
+  hexInput.addEventListener("keydown", function (e) { if (e.key === "Enter") { applyHex(); hexInput.blur(); } });
+
+  // ---- 初始化 ----
+  setWidth(64n);
+})();
+</script>
+</body>
+</html>
