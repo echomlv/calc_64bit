@@ -33,6 +33,31 @@ npm install   # 首次安装开发依赖（jsdom）
 npm test      # 运行全部用例
 ```
 
+## 部署到 GitHub Pages
+
+本项目是纯静态单文件，适合用 GitHub Pages 免费托管。
+
+> 说明：GitHub Pages 有「用户主站」(`用户名.github.io`) 和「项目站」两种，二者独立。
+> 本项目作为项目站部署，地址形如 `https://用户名.github.io/calc_64bit/`，不会影响你已有的主站。
+
+1. **新建空仓库**：打开 <https://github.com/new>，仓库名填 `calc_64bit`，选 **Public**，
+   不要勾选 README/.gitignore（保持空），点 Create。
+
+2. **推送代码**（把 URL 换成你的仓库地址）：
+
+   ```bash
+   git remote add origin https://github.com/你的用户名/calc_64bit.git
+   git push -u origin main
+   ```
+
+3. **开启 Pages**：进仓库 **Settings → Pages**，Source 选 **Deploy from a branch**，
+   Branch 选 **main**、目录选 **/ (root)**，Save。
+
+4. 等 1~2 分钟，访问 `https://你的用户名.github.io/calc_64bit/` 即可使用。
+   Pages 会自动把根目录的 `index.html` 当作首页（`README.md` 仅作仓库说明页，不影响部署）。
+
+之后每次 `git push` 到 `main`，Pages 会自动重新部署。
+
 ## 项目结构
 
 ```
